@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8"/>
+    <title>Gestor de Compromisos Hídricos</title>
+    <link rel="icon" type="image/svg+xml" href="assets/ANTO.L.svg">
+
+    <!-- Fuentes y Material Icons -->
+    <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin/>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?display=swap&family=Inter%3Awght%40400%3B500%3B600%3B700&family=Roboto%3Awght%40400%3B500%3B700" as="style" onload="this.rel='stylesheet'"/>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons"/>
+    
+    <!-- Librerías Externas -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
+    
+    <!-- Supabase SDK -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+    <!-- Enlace a tu hoja de estilos -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ===== PANTALLA DE LOGIN (Visible por defecto) ===== -->
+<div id="login-screen" class="auth-screen">
+    <div class="auth-container">
+        <div class="auth-header">
+            <img src="assets/ANTO.L.svg" alt="Logo Antofagasta" class="auth-logo">
+            <h1 class="auth-title">Gestor de Compromisos Hídricos</h1>
+            <p class="auth-subtitle">Acceso restringido - Solo personal autorizado</p>
+        </div>
+        
+        <div class="auth-content">
+            <button id="google-login-btn" class="btn-auth-google">
+                <svg class="auth-google-icon" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Iniciar sesión con Google
+            </button>
+            
+            <button id="debug-btn" class="btn-auth-google" style="background: #666; margin-top: 10px;">
+                <span style="color: white;">🔍 Diagnóstico</span>
+            </button>
+            
+            <button id="test-download-btn" class="btn-auth-google" style="background: #d97706; margin-top: 10px;">
+                <span style="color: white;">🧪 Test Download</span>
+            </button>
+            
+            <button id="debug-files-btn" class="btn-auth-google" style="background: #059669; margin-top: 10px;">
+                <span style="color: white;">📁 Debug Files</span>
+            </button>
+            
+            <div id="auth-error" class="auth-error hidden">
+                <span class="material-icons">error_outline</span>
+                <span id="auth-error-text">Error de autenticación</span>
+            </div>
+            
+            <div id="auth-loading" class="auth-loading hidden">
+                <div class="auth-spinner"></div>
+                <span>Verificando acceso...</span>
+            </div>
+        </div>
+        
+        <div class="auth-footer">
+            <p>© 2025 Sistema de Gestión MLP</p>
+        </div>
+    </div>
+</div>
+
+<!-- ===== APLICACIÓN PRINCIPAL (Oculta por defecto) ===== -->
+<div id="main-app" class="hidden">
+    <div class="relative flex size-full min-h-screen flex-col">
+        <div class="layout-container flex h-full grow flex-col">
+            <header class="header-gradient flex items-center justify-between whitespace-nowrap border-b border-solid border-gray-600 px-6 py-4 sticky top-0 z-50 backdrop-blur-md shadow-lg">
+                <div class="flex items-center gap-3">
+                    <div class="h-12 w-12 flex items-center justify-center">
+                        <img src="assets/ANTO.L.svg"
+                             alt="Logo Antofagasta"
+                             class="max-h-full max-w-full select-none" />
+                    </div>
+                </div>
+                <h1 class="text-xl font-semibold leading-tight tracking-tight text-white">Gestor de Compromisos Hídricos</h1>
+                
+                <!-- Info de usuario autenticado -->
+                <div class="flex items-center gap-4">
+                    <div id="user-info" class="user-info">
+                        <span id="user-name" class="user-name">Usuario</span>
+                        <span id="user-role" class="user-role">Editor</span>
+                    </div>
+                    <button id="logout-btn" class="btn-logout" title="Cerrar sesión">
+                        <span class="material-icons">logout</span>
+                    </button>
+                </div>
+                
+                <div id="file-status" class="file-status">
+                    <span id="current-filename">Sin archivo</span>
+                    <span id="unsaved-indicator" class="unsaved-changes hidden">*</span>
+                </div>
+                <div id="selection-status" class="selection-info hidden">
+                    <span id="selection-count">0</span> seleccionadas
+                </div>
+                <div class="flex flex-1 justify-end items-center gap-4">
+                    <div class="view-toggle">
+                        <button id="data-view-btn" class="active">
+                            <span class="material-icons text-base">table_view</span>
+                            Datos
+                        </button>
+                        <button id="dashboard-view-btn">
+                            <span class="material-icons text-base">dashboard</span>
+                            Dashboard
+                        </button>
+                    </div>
+                    <button class="icon-button p-2 rounded-full text-white hover:bg-white/10">
+                        <span class="material-icons">help_outline</span>
+                    </button>
+                    <div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-white shadow-md" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDmShSBktUylKinO_McmGifY3LfePCTCHzN3ePspeVofmqj-f0fS_ZVLkxAPBF7cNg7pEZeFCrroKU7WY1FO2iQ_WZgKMoCiDq5Ihwe23sihUYrsEOKHps1qCdawV7M-gWJb8Kyh6qXZerkFne6jRPev6DCV-GqDVRywsWhHisdROwAjCJcL31XYAm4OQPUnvyelAn6Ui2M0GpTdDmgtIHFGKE1nKD3Il_qujBhNJjs0WW_peqsFyy-ppQqGey_SWANAB-zldngeex8");'></div>
+                </div>
+            </header>
+
+            <!-- Vista de Datos - Layout contenido -->
+            <div id="data-section" class="flex-1">
+                <main class="px-6 lg:px-10 flex flex-1 justify-center py-8">
+                    <div class="layout-content-container flex flex-col w-full max-w-7xl">
+                        <div class="flex items-center gap-4">
+                            <h2 class="text-2xl font-semibold leading-tight">Vista General de Datos</h2>
+                        </div>
+
+                        <!-- Controles solo para vista de datos -->
+                        <div id="data-controls" class="flex flex-wrap justify-end items-center gap-3 flex-wrap mt-4 mb-6 p-4 bg-gray-800 rounded-lg shadow-md border border-gray-600">
+                            <!-- Archivo -->
+                            <div class="flex items-center gap-2">
+                                <input type="file" id="csv-file-input" accept=".csv" class="hidden">
+                                <button id="open-file-btn" class="btn-secondary">
+                                    <span class="material-icons text-base">cloud_download</span>
+                                    Cargar desde BD
+                                </button>
+                            </div>
+                            <!-- Guardado (solo para editores) -->
+                            <div id="save-controls" class="flex items-center gap-2">
+                                <button id="save-btn" class="btn-success" disabled>
+                                    <span class="material-icons text-base">save</span>
+                                    Guardar
+                                </button>
+                                <button id="save-as-btn" class="btn-success" disabled>
+                                    <span class="material-icons text-base">file_download</span>
+                                    Exportar CSV
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="empty-state" class="empty-state">
+                            <div class="mb-4">
+                                <span class="material-icons text-6xl" style="color: #3DA7A0;">description</span>
+                            </div>
+                            <h3 class="text-xl font-semibold mb-2">No hay datos cargados</h3>
+                            <p class="mb-6">Comienza importando datos desde la base de datos</p>
+                            <div class="flex gap-4 justify-center">
+                                <button id="empty-open-btn" class="btn-primary">
+                                    <span class="material-icons text-base">cloud_download</span>
+                                    Cargar desde BD
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="data-container" class="hidden">
+                            <div class="mb-6 px-4">
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <span class="material-icons text-gray-400">search</span>
+                                    </div>
+                                    <input id="table-filter-input" class="search-input" placeholder="         Filtrar datos en la tabla..." type="search"/>
+                                </div>
+                            </div>
+                            <div class="px-4">
+                                <div class="overflow-x-auto rounded-lg border border-gray-600 bg-gray-800 shadow-lg">
+                                    <table class="min-w-full">
+                                        <thead class="table-header-gradient">
+                                        <tr>
+                                            <th class="table-header-cell-oua">OUA</th>
+                                            <th class="table-header-cell-compact">Derechos (l/s)</th>
+                                            <th class="table-header-cell-compact">Acciones</th>
+                                            <th class="table-header-cell-compact">Adjuntar Certificado</th>
+                                            <th class="table-header-cell-periodo">Período</th>
+                                            <th class="table-header-cell-compact">Valor Acciones ($/Año)</th>
+                                            <th class="table-header-cell-compact">Valor Limpieza ($/Año)</th>
+                                            <th class="table-header-cell-compact">Valor Celador ($/Año)</th>
+                                            <th class="table-header-cell-compact">Otros ($/Año)</th>
+                                            <th class="table-header-cell-compact">Valor Total ($/Año)</th>
+                                            <th class="table-header-cell-compact">Forma de Pago</th>
+                                            <th class="table-header-cell-compact">Adjuntar Memo Pago</th>
+                                            <th class="table-header-cell-fecha">Fecha Pago</th>
+                                            <th class="table-header-cell-status">Status Pago</th>
+                                            <th class="table-header-cell-comentario">Comentario</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody id="data-table-body" class="bg-gray-800">
+                                        </tbody>
+                                    </table>
+                            </div>
+                        </div>
+
+                        <div id="pagination-controls" class="mt-6 px-4 flex justify-between items-center">
+                            <div id="data-info" class="text-sm text-gray-400"></div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+
+            <!-- Dashboard Container -->
+            <div id="dashboard-container" class="hidden flex-1 px-6 lg:px-10 py-8">
+                <div class="w-full max-w-none">
+                    <div class="mb-8">
+                        <h2 class="text-3xl font-bold text-white mb-2">Dashboard Ejecutivo</h2>
+                        <p class="text-gray-400">Análisis completo de datos y métricas clave</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+                        <div class="dashboard-metric"><div id="total-ouas" class="dashboard-metric-value">0</div><div class="dashboard-metric-label">Total OUAs</div></div>
+                        <div class="dashboard-metric"><div id="total-amount" class="dashboard-metric-value">$0</div><div class="dashboard-metric-label">Monto Pagado</div><div class="dashboard-metric-subtitle">Total paid by users during the current year</div></div>
+                        <div class="dashboard-metric"><div id="completion-rate" class="dashboard-metric-value">0%</div><div class="dashboard-metric-label">% Pagos Realizados</div><div class="dashboard-metric-subtitle">Percentage of water payment commitments already completed</div></div>
+                        <div class="dashboard-metric"><div id="avg-rights" class="dashboard-metric-value">0 l/s</div><div class="dashboard-metric-label">Total Derechos de Agua</div><div class="dashboard-metric-subtitle">Total granted water rights (in liters per second)</div></div>
+                        <div class="dashboard-metric"><div id="pending-payments" class="dashboard-metric-value">0</div><div class="dashboard-metric-label">Pagos Pendientes</div></div>
+                    </div>
+
+                    <div id="alerts-container" class="mb-8"></div>
+
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
+                        <div class="dashboard-card">
+                            <h3 class="text-lg font-semibold text-white mb-2">Estado de Pagos</h3>
+                            <div class="text-sm text-gray-600 mb-4 text-center" id="statusChartCaption">
+                                <div id="periodRangeText">Periodo considerado: 2020</div>
+                                <div>Gráfico muestra cantidad de OUAs por estado de pago</div>
+                            </div>
+                            <div class="chart-container"><canvas id="statusChart"></canvas></div>
+                        </div>
+                        <div class="dashboard-card">
+                            <h3 class="text-lg font-semibold text-white mb-4">Payments to OUAs by Regularization Period</h3>
+                            
+                            <!-- OUA Filter Dropdown -->
+                            <div class="mb-4">
+                                <label for="ouaFilterAmount" class="block text-sm font-medium text-gray-700 mb-2">Filtrar por OUA:</label>
+                                <select id="ouaFilterAmount" class="block w-full max-w-xs px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                    <option value="todas">Todas las OUAs</option>
+                                </select>
+                            </div>
+                            
+                            <div class="chart-container"><canvas id="amountChart"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
+                        <div class="dashboard-card">
+                            <div class="flex flex-col lg:flex-row gap-6">
+                                <!-- Indicator Container -->
+                                <div class="lg:w-1/2 dashboard-metric" style="text-align: center; padding: 20px;">
+                                    <div class="dashboard-metric-label" style="font-size: 16px; font-weight: 700; margin-bottom: 16px;">% Derechos regularizados</div>
+                                    <div class="dashboard-metric-value" id="regularizationPercentage" style="font-size: 48px; font-weight: 700; line-height: 1;">0%</div>
+                                </div>
+                                
+                                <!-- Chart Container -->
+                                <div class="lg:w-1/2">
+                                    <div class="chart-container">
+                                        <canvas id="regularizationChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="dashboard-card"><h3 class="text-lg font-semibold text-white mb-4">Derechos de agua por OUA</h3><div class="chart-container"><canvas id="topOuasChart"></canvas></div></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
+                        <div class="dashboard-card"><h3 class="text-lg font-semibold text-white mb-4">Últimos Pagos Realizados</h3><div class="overflow-x-auto"><table class="dashboard-table"><thead><tr><th>OUA</th><th>Monto</th><th>Fecha</th></tr></thead><tbody id="recent-payments-table"></tbody></table></div></div>
+                        <div class="dashboard-card"><h3 class="text-lg font-semibold text-white mb-4">Pagos Pendientes</h3><div class="overflow-x-auto"><table class="dashboard-table"><thead><tr><th>OUA</th><th>Monto</th><th>Fecha</th><th>Estado</th><th>Comentario</th></tr></thead><tbody id="upcoming-payments-table"></tbody></table></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <footer class="border-t border-gray-600 bg-gray-800 px-6 py-4 text-center text-sm text-gray-400">
+                © 2024 Gestor de Compromisos Hídricos. Todos los derechos reservados.
+            </footer>
+        </div>
+    </div> 
+</div>
+
+<!-- ===== MODAL PARA GESTIÓN DE CERTIFICADOS PDF ===== -->
+<div id="certificate-modal" class="certificate-modal hidden">
+    <div class="certificate-modal-overlay">
+        <div class="certificate-modal-content">
+            <!-- Header del Modal -->
+            <div class="certificate-modal-header">
+                <div class="certificate-modal-header-left">
+                    <span class="material-icons certificate-modal-icon">picture_as_pdf</span>
+                    <h3 class="certificate-modal-title">Gestión de Certificado</h3>
+                </div>
+                <button id="certificate-modal-close" class="certificate-modal-close">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+            
+            <!-- Información de la OUA -->
+            <div class="certificate-modal-info">
+                <div class="certificate-modal-info-item">
+                    <span class="certificate-modal-info-label">OUA:</span>
+                    <span id="certificate-modal-oua" class="certificate-modal-info-value">-</span>
+                </div>
+                <div class="certificate-modal-info-item">
+                    <span class="certificate-modal-info-label">Período:</span>
+                    <span id="certificate-modal-period" class="certificate-modal-info-value">-</span>
+                </div>
+            </div>
+            
+            <!-- Área de carga de archivo -->
+            <div class="certificate-modal-upload-area">
+                <div id="certificate-upload-zone" class="certificate-upload-zone">
+                    <div class="certificate-upload-content">
+                        <span class="material-icons certificate-upload-icon">cloud_upload</span>
+                        <p class="certificate-upload-text">Arrastra un archivo PDF aquí o haz click para seleccionar</p>
+                        <p class="certificate-upload-subtext">Archivos PDF únicamente (máx. 10MB)</p>
+                    </div>
+                    <input type="file" id="certificate-file-input" accept=".pdf" class="certificate-file-input hidden">
+                </div>
+                
+                <!-- Progress Bar -->
+                <div id="certificate-upload-progress" class="certificate-upload-progress hidden">
+                    <div class="certificate-progress-bar">
+                        <div id="certificate-progress-fill" class="certificate-progress-fill"></div>
+                    </div>
+                    <span id="certificate-progress-text" class="certificate-progress-text">Subiendo... 0%</span>
+                </div>
+            </div>
+            
+            <!-- Lista de Certificados -->
+            <div id="certificate-files-section" class="certificate-files-section hidden">
+                <h4 class="certificate-files-title">Certificados Subidos</h4>
+                <div id="certificate-files-list" class="certificate-files-list">
+                    <!-- Los archivos se cargarán dinámicamente aquí -->
+                </div>
+            </div>
+            
+            <!-- Botones de acción -->
+            <div class="certificate-modal-actions">
+                <button id="certificate-cancel-btn" class="btn-certificate-cancel">Cancelar</button>
+                <button id="certificate-save-btn" class="btn-certificate-save" disabled>Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Enlace a tu script de JavaScript -->
+<script src="script.js" defer></script>
+
+</body>
+</html>
